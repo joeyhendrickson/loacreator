@@ -1,7 +1,8 @@
 import { runGeneration } from "@/lib/generation/run-generation";
 import type { GenerationProgressEvent } from "@/lib/generation/progress";
 
-export const maxDuration = 7200;
+// Vercel Hobby caps serverless functions at 300s; allow longer runs locally.
+export const maxDuration = process.env.VERCEL ? 300 : 7200;
 
 export async function POST(request: Request) {
   const formData = await request.formData();
