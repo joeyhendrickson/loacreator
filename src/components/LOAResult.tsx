@@ -1,6 +1,9 @@
 "use client";
 
+import { useState } from "react";
+
 import { FieldEvidenceList } from "@/components/FieldEvidenceList";
+import { Spinner } from "@/components/Spinner";
 import type { LOAGenerationResult } from "@/lib/types";
 
 interface LOAResultProps {
@@ -8,8 +11,7 @@ interface LOAResultProps {
   onReset: () => void;
 }
 
-function downloadText(content: string, filename: string) {
-  const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
@@ -18,8 +20,27 @@ function downloadText(content: string, filename: string) {
   URL.revokeObjectURL(url);
 }
 
+function downloadText(content: string, filename: string) {
+  downloadBlob(
+    new Blob([content], { type: "text/plain;charset=utf-8" }),
+    filename,
+  );
+}
+
 export function LOAResult({ result, onReset }: LOAResultProps) {
+  const [downloadingDoc, setDownloadingDoc] = useState(false);
   const jsonExport = JSON.stringify(result, null, 2);
+
+  const handleDownloadDoc = async () => {
+    setDownloadingDoc(true);
+    try {
+      const { buildLoaDocBlob } = await import("@/lib/documents/build-loa-doc");
+      const blob = await buildLoaDocBlob(result);
+      downloadBlob(blob, "completed-loa.doc");
+    } finally {
+      setDownloadingDoc(false);
+    }
+  };
 
   return (
     <section className="space-y-6">
@@ -29,19 +50,25 @@ export function LOAResult({ result, onReset }: LOAResultProps) {
             <span className="badge-brand mb-3">Complete</span>
             <h2 className="text-2xl font-bold text-slate-900">Completed LOA</h2>
             <p className="mt-1 text-sm text-slate-500">
-              Review the filled form and evidence for each field, then download
-              or start over.
+              Review the filled form and evidence, then download the Word
+              document or start over.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
-              onClick={() =>
-                downloadText(result.completedLoa, "completed-loa.txt")
-              }
+              onClick={handleDownloadDoc}
+              disabled={downloadingDoc}
               className="btn-primary"
             >
-              Download LOA
+              {downloadingDoc ? (
+                <>
+                  <Spinner />
+                  Preparing document…
+                </>
+              ) : (
+                "Download LOA (.doc)"
+              )}
             </button>
             <button
               type="button"

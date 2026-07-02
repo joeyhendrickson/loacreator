@@ -1,59 +1,42 @@
-import { NextResponse } from "next/server";
+import { runGeneration } from "@/lib/generation/run-generation";
+import type { GenerationProgressEvent } from "@/lib/generation/progress";
 
-import { MAX_CONTEXT_DOCUMENTS } from "@/lib/constants";
-import { generateLOA, parseUploadedFile } from "@/lib/openai/generate-loa";
-
-export const maxDuration = 300;
+export const maxDuration = 7200;
 
 export async function POST(request: Request) {
-  try {
-    if (!process.env.OPENAI_API_KEY) {
-      return NextResponse.json(
-        { error: "OPENAI_API_KEY is not configured." },
-        { status: 500 },
-      );
-    }
+  const formData = await request.formData();
+  const startTime = Date.now();
+  const encoder = new TextEncoder();
 
-    const formData = await request.formData();
-    const templateFile = formData.get("template");
+  const stream = new ReadableStream({
+    async start(controller) {
+      const send = (update: GenerationProgressEvent) => {
+        controller.enqueue(encoder.encode(`${JSON.stringify(update)}\n`));
+      };
 
-    if (!(templateFile instanceof File) || templateFile.size === 0) {
-      return NextResponse.json(
-        { error: "An LOA template file is required." },
-        { status: 400 },
-      );
-    }
+      try {
+        await runGeneration(formData, send, startTime);
+      } catch (error) {
+        console.error("LOA generation failed:", error);
+        const message =
+          error instanceof Error ? error.message : "Failed to generate LOA.";
+        send({
+          stage: "error",
+          progress: 0,
+          message,
+          error: message,
+          elapsedMs: Date.now() - startTime,
+        });
+      } finally {
+        controller.close();
+      }
+    },
+  });
 
-    const contextFiles = formData
-      .getAll("documents")
-      .filter((entry): entry is File => entry instanceof File && entry.size > 0);
-
-    if (contextFiles.length === 0) {
-      return NextResponse.json(
-        { error: "At least one context document is required." },
-        { status: 400 },
-      );
-    }
-
-    if (contextFiles.length > MAX_CONTEXT_DOCUMENTS) {
-      return NextResponse.json(
-        { error: `Maximum ${MAX_CONTEXT_DOCUMENTS} context documents allowed.` },
-        { status: 400 },
-      );
-    }
-
-    const [template, ...contextDocuments] = await Promise.all([
-      parseUploadedFile(templateFile),
-      ...contextFiles.map(parseUploadedFile),
-    ]);
-
-    const result = await generateLOA(template, contextDocuments);
-
-    return NextResponse.json(result);
-  } catch (error) {
-    console.error("LOA generation failed:", error);
-    const message =
-      error instanceof Error ? error.message : "Failed to generate LOA.";
-    return NextResponse.json({ error: message }, { status: 500 });
-  }
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "application/x-ndjson",
+      "Cache-Control": "no-cache, no-transform",
+    },
+  });
 }

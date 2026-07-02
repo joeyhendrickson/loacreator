@@ -11,7 +11,7 @@ Upload a blank LOA template plus up to 30 source documents (invoices, account su
 - **Vision support** — image-based documents are sent to the model for OCR-style extraction
 - **Structured output** — field-by-field mapping with source document attribution
 - **Evidence tracking** — per-field decision rationale, source excerpts, and confidence levels (high / medium / low / none)
-- **Download** — export completed LOA as `.txt` or structured `.json`
+- **Download** — export completed LOA as a Word document (`.doc`) or structured `.json`
 
 ## Setup
 
@@ -41,7 +41,7 @@ Open [http://localhost:3000](http://localhost:3000).
 
 ## Supported File Types
 
-- PDF (`.pdf`)
+- PDF (`.pdf`) — parsed with `unpdf` (serverless-safe, no worker setup)
 - Word (`.doc`, `.docx`)
 - Plain text / CSV (`.txt`, `.csv`)
 - Excel (`.xls`, `.xlsx`)

@@ -3,10 +3,24 @@
 import { useState } from "react";
 
 import { FileUploadZone } from "@/components/FileUploadZone";
+import { GenerationProgress } from "@/components/GenerationProgress";
 import { LOAResult } from "@/components/LOAResult";
 import { Spinner } from "@/components/Spinner";
 import { MAX_CONTEXT_DOCUMENTS } from "@/lib/constants";
+import type {
+  CompleteProgressUpdate,
+  ErrorProgressUpdate,
+  GenerationProgressEvent,
+  ProgressUpdate,
+} from "@/lib/generation/progress";
 import type { LOAGenerationResult, UploadStatus } from "@/lib/types";
+
+const INITIAL_PROGRESS: ProgressUpdate = {
+  stage: "validating",
+  progress: 0,
+  message: "Starting LOA generation…",
+  elapsedMs: 0,
+};
 
 export function LOACreatorApp() {
   const [templateFile, setTemplateFile] = useState<File[]>([]);
@@ -14,6 +28,8 @@ export function LOACreatorApp() {
   const [status, setStatus] = useState<UploadStatus>("idle");
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<LOAGenerationResult | null>(null);
+  const [progress, setProgress] = useState<ProgressUpdate | null>(null);
+  const [startedAt, setStartedAt] = useState<number | null>(null);
 
   const canGenerate =
     templateFile.length === 1 &&
@@ -23,8 +39,11 @@ export function LOACreatorApp() {
   const handleGenerate = async () => {
     if (!canGenerate) return;
 
+    const generationStartedAt = Date.now();
+    setStartedAt(generationStartedAt);
     setStatus("generating");
     setError(null);
+    setProgress(INITIAL_PROGRESS);
 
     const formData = new FormData();
     formData.append("template", templateFile[0]);
@@ -38,17 +57,64 @@ export function LOACreatorApp() {
         body: formData,
       });
 
-      const data = await response.json();
-
       if (!response.ok) {
-        throw new Error(data.error ?? "Generation failed.");
+        const data = await response.json().catch(() => null);
+        throw new Error(data?.error ?? "Generation failed.");
       }
 
-      setResult(data as LOAGenerationResult);
+      if (!response.body) {
+        throw new Error("No response stream received.");
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let finalResult: LOAGenerationResult | null = null;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+
+        for (const line of lines) {
+          if (!line.trim()) continue;
+
+          const event = JSON.parse(line) as GenerationProgressEvent;
+
+          if (event.stage === "error") {
+            throw new Error((event as ErrorProgressUpdate).error);
+          }
+
+          if (event.stage === "complete") {
+            finalResult = (event as CompleteProgressUpdate).result;
+            setProgress({
+              stage: "complete",
+              progress: 100,
+              message: event.message,
+              elapsedMs: event.elapsedMs,
+            });
+            continue;
+          }
+
+          setProgress(event);
+        }
+      }
+
+      if (!finalResult) {
+        throw new Error("Generation finished without a result.");
+      }
+
+      setResult(finalResult);
       setStatus("success");
     } catch (err) {
       setStatus("error");
       setError(err instanceof Error ? err.message : "Something went wrong.");
+    } finally {
+      setProgress(null);
+      setStartedAt(null);
     }
   };
 
@@ -58,6 +124,8 @@ export function LOACreatorApp() {
     setResult(null);
     setError(null);
     setStatus("idle");
+    setProgress(null);
+    setStartedAt(null);
   };
 
   if (result) {
@@ -127,11 +195,8 @@ export function LOACreatorApp() {
           </button>
         </div>
 
-        {status === "generating" && (
-          <div className="mt-4 rounded-xl bg-brand-50 px-4 py-3 text-sm text-brand-700 ring-1 ring-brand-100">
-            AI is reviewing your documents and filling the LOA template. This
-            may take a minute.
-          </div>
+        {status === "generating" && progress && startedAt !== null && (
+          <GenerationProgress progress={progress} startedAt={startedAt} />
         )}
       </section>
     </div>

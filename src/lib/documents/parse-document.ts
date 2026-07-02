@@ -1,7 +1,5 @@
 import mammoth from "mammoth";
 
-import { configurePdfWorker } from "@/lib/documents/pdf-worker";
-
 export interface ParseResult {
   text: string;
   type: "text" | "image";
@@ -34,19 +32,15 @@ export async function parseDocument(
   }
 
   if (normalizedMime === "application/pdf") {
-    await configurePdfWorker();
-    const { PDFParse } = await import("pdf-parse");
-    const parser = new PDFParse({ data: buffer });
-    try {
-      const parsed = await parser.getText();
-      return {
-        text: parsed.text.trim() || `[PDF had no extractable text: ${fileName}]`,
-        type: "text",
-        mimeType: normalizedMime,
-      };
-    } finally {
-      await parser.destroy();
-    }
+    const { extractText } = await import("unpdf");
+    const { text } = await extractText(new Uint8Array(buffer), {
+      mergePages: true,
+    });
+    return {
+      text: text.trim() || `[PDF had no extractable text: ${fileName}]`,
+      type: "text",
+      mimeType: normalizedMime,
+    };
   }
 
   if (

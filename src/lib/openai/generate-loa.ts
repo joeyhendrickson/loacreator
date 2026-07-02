@@ -11,7 +11,12 @@ function getOpenAIClient() {
   if (!apiKey) {
     throw new Error("OPENAI_API_KEY is not configured.");
   }
-  return new OpenAI({ apiKey });
+  return new OpenAI({
+    apiKey,
+    // Allow long-running LOA generation to finish without client-side cutoff.
+    timeout: 2 * 60 * 60 * 1000,
+    maxRetries: 3,
+  });
 }
 
 const responseSchema = {
