@@ -6,6 +6,8 @@ Guidelines:
 - Preserve formatting for phone numbers, account IDs, and addresses as they appear in source documents unless the template requires a specific format.
 - Note any conflicts between source documents in the notes array.
 - The completed LOA should read as a fully filled form ready for submission.
+- Ensure that the output LOA includes the screenshot's table format. When the LOA template or source screenshots contain tables (rows/columns, phone number lists, TN blocks, service tables, etc.), preserve that table structure in completedLoa using aligned columns, headers, and row layout — do not flatten tables into plain paragraphs unless the template has no table.
+- Make sure to include the full range of TNs and associated billing numbers and account numbers within the table. Do not limit the rows. Include all of the relevant information from the source documents — every telephone number, billing number, and account number found in the sources must appear in the completed LOA table(s).
 
 Evidence tracking (required for every field):
 - For each field, provide evidence.rationale explaining why this value was chosen and how it maps to the LOA template.
@@ -38,4 +40,8 @@ ${doc.content}`,
 
 ---
 
-Fill out the LOA template using only the source documents above. Return structured JSON matching the required schema.`;
+Fill out the LOA template using only the source documents above. Return structured JSON matching the required schema.
+
+Important: The completedLoa must preserve the table format shown in the LOA template and any screenshot source documents — keep tables as tables with headers, columns, and rows populated with the correct values.
+
+Include the full range of TNs, billing numbers, and account numbers from all source documents. Do not truncate, summarize, or limit table rows — every relevant TN and its associated billing and account data must be included.`;

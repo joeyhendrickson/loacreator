@@ -1,4 +1,5 @@
 import { MAX_CONTEXT_DOCUMENTS } from "@/lib/constants";
+import { createPlayByPlayTracker } from "@/lib/generation/ai-play-by-play";
 import type { GenerationProgressEvent, ProgressUpdate } from "@/lib/generation/progress";
 import { generateLOA, parseUploadedFile } from "@/lib/openai/generate-loa";
 
@@ -95,21 +96,35 @@ export async function runGeneration(
     contextDocuments.push(await parseUploadedFile(file));
   }
 
-  report({
-    stage: "generating",
-    progress: 50,
-    message: "AI is reviewing documents and filling the LOA template…",
+  const playByPlay = createPlayByPlayTracker({
+    templateName: template.name,
+    templateTextLength: template.text.length,
+    documents: contextDocuments.map((doc) => ({
+      name: doc.name,
+      type: doc.type,
+      textLength: doc.text.length,
+    })),
+    model: process.env.OPENAI_MODEL ?? "gpt-5.5",
   });
 
-  const generatingStartedAt = Date.now();
-  const heartbeat = setInterval(() => {
-    const minutes = Math.floor((Date.now() - generatingStartedAt) / 60000);
+  const reportGenerating = (generatingElapsedMs: number) => {
+    playByPlay.tick();
+
+    const minutes = Math.floor(generatingElapsedMs / 60000);
     report({
       stage: "generating",
       progress: Math.min(88, 50 + minutes * 3),
-      message: `AI is still processing your documents (${minutes} min so far)…`,
+      message: playByPlay.getLatestMessage(),
+      activityLog: playByPlay.getLog(),
     });
-  }, 30_000);
+  };
+
+  reportGenerating(0);
+
+  const generatingStartedAt = Date.now();
+  const heartbeat = setInterval(() => {
+    reportGenerating(Date.now() - generatingStartedAt);
+  }, 6_000);
 
   let result;
   try {
@@ -118,10 +133,13 @@ export async function runGeneration(
     clearInterval(heartbeat);
   }
 
+  playByPlay.complete();
+
   report({
     stage: "finalizing",
     progress: 95,
     message: "Preparing your completed LOA…",
+    activityLog: playByPlay.getLog(),
   });
 
   onProgress({
@@ -129,6 +147,7 @@ export async function runGeneration(
     progress: 100,
     message: "LOA generation complete.",
     elapsedMs: elapsedMs(),
+    activityLog: [...playByPlay.getLog(), "LOA generation complete."],
     result,
   });
 }

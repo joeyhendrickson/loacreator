@@ -115,9 +115,35 @@ export function GenerationProgress({
       </ol>
 
       {progress.stage === "generating" && (
-        <div className="rounded-lg border border-brand-200 bg-white/80 px-3 py-2 text-xs text-brand-800">
-          Large document sets can take a while. This will keep running until the
-          AI finishes — you can leave this tab open.
+        <div className="rounded-lg border border-brand-200 bg-white/80 px-3 py-3 text-xs text-brand-800">
+          <p className="mb-2 font-semibold text-brand-900">
+            What the AI is processing
+          </p>
+          <ul className="max-h-64 space-y-2 overflow-y-auto">
+            {(progress.activityLog ?? [progress.message]).map((entry, index, log) => {
+              const isLatest = index === log.length - 1;
+
+              return (
+                <li key={`${entry}-${index}`} className="flex gap-2 leading-relaxed">
+                  <span
+                    className={`mt-0.5 shrink-0 ${
+                      isLatest ? "text-brand-600" : "text-emerald-600"
+                    }`}
+                    aria-hidden="true"
+                  >
+                    {isLatest ? "→" : "✓"}
+                  </span>
+                  <span className={isLatest ? "font-medium text-brand-900" : ""}>
+                    {entry}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+          <p className="mt-3 border-t border-brand-100 pt-2 text-brand-700">
+            Updates every few seconds while the model works through your template
+            and source files. You can leave this tab open.
+          </p>
         </div>
       )}
     </div>

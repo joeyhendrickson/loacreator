@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { FileUploadZone } from "@/components/FileUploadZone";
 import { GenerationProgress } from "@/components/GenerationProgress";
@@ -13,6 +13,11 @@ import type {
   GenerationProgressEvent,
   ProgressUpdate,
 } from "@/lib/generation/progress";
+import {
+  clearUploadedFiles,
+  loadUploadedFiles,
+  saveUploadedFiles,
+} from "@/lib/storage/uploaded-files";
 import type { LOAGenerationResult, UploadStatus } from "@/lib/types";
 
 const INITIAL_PROGRESS: ProgressUpdate = {
@@ -30,6 +35,39 @@ export function LOACreatorApp() {
   const [result, setResult] = useState<LOAGenerationResult | null>(null);
   const [progress, setProgress] = useState<ProgressUpdate | null>(null);
   const [startedAt, setStartedAt] = useState<number | null>(null);
+  const [restoredUploads, setRestoredUploads] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void loadUploadedFiles()
+      .then(({ templateFiles, contextFiles: savedContextFiles }) => {
+        if (cancelled) return;
+        if (templateFiles.length > 0) {
+          setTemplateFile(templateFiles);
+        }
+        if (savedContextFiles.length > 0) {
+          setContextFiles(savedContextFiles);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setRestoredUploads(true);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!restoredUploads) return;
+
+    void saveUploadedFiles(templateFile, contextFiles).catch((saveError) => {
+      console.error("Failed to persist uploaded files:", saveError);
+    });
+  }, [templateFile, contextFiles, restoredUploads]);
 
   const canGenerate =
     templateFile.length === 1 &&
@@ -95,11 +133,17 @@ export function LOACreatorApp() {
               progress: 100,
               message: event.message,
               elapsedMs: event.elapsedMs,
+              activityLog: event.activityLog,
             });
             continue;
           }
 
-          setProgress(event);
+          setProgress((previous) => ({
+            ...event,
+            activityLog:
+              event.activityLog ??
+              (event.stage === "generating" ? previous?.activityLog : undefined),
+          }));
         }
       }
 
@@ -126,6 +170,7 @@ export function LOACreatorApp() {
     setStatus("idle");
     setProgress(null);
     setStartedAt(null);
+    void clearUploadedFiles();
   };
 
   if (result) {
@@ -134,6 +179,23 @@ export function LOACreatorApp() {
 
   return (
     <div className="space-y-6">
+      {!restoredUploads && (
+        <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+          Restoring previously uploaded files…
+        </div>
+      )}
+
+      {restoredUploads &&
+        (templateFile.length > 0 || contextFiles.length > 0) && (
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+            Restored your previous uploads
+            {templateFile.length === 1 ? `: ${templateFile[0].name}` : ""}
+            {contextFiles.length > 0
+              ? ` and ${contextFiles.length} context document(s).`
+              : "."}
+          </div>
+        )}
+
       <FileUploadZone
         step={1}
         label="LOA Template"

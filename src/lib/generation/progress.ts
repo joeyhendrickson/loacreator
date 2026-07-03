@@ -16,6 +16,7 @@ export interface ProgressUpdate {
   elapsedMs: number;
   documentIndex?: number;
   documentTotal?: number;
+  activityLog?: string[];
 }
 
 export interface CompleteProgressUpdate extends ProgressUpdate {
